@@ -1,5 +1,5 @@
 const express = require('express');
-const { Order, Customer, Worker, User } = require('../models');
+const { Order, Customer, Worker, User, OrderItem, Measurement } = require('../models');
 const { auth, adminAuth } = require('../middleware/auth');
 const { Op } = require('sequelize');
 const router = express.Router();
@@ -16,6 +16,14 @@ router.get('/', auth, async (req, res) => {
         {
           model: Worker,
           include: [{ model: User, attributes: ['name', 'email'] }]
+        },
+        {
+          model: OrderItem,
+          as: 'items'
+        },
+        {
+          model: Measurement,
+          as: 'measurements'
         }
       ],
       order: [['createdAt', 'DESC']]
@@ -48,7 +56,8 @@ router.post('/create-with-customer', [auth, adminAuth], async (req, res) => {
       deliveryDate,
       notes,
       advancePayment,
-      totalAmount
+      totalAmount,
+      measurements
     } = req.body;
 
     let customerId;
@@ -74,11 +83,15 @@ router.post('/create-with-customer', [auth, adminAuth], async (req, res) => {
       customerId = selectedCustomer.id;
     }
 
-    const orderCount = await Order.count();
-    const orderNumber = `SS${String(orderCount + 1).padStart(6, '0')}`;
+    // Find the max order number and increment it
+    const latestOrder = await Order.findOne({
+      order: [['orderNumber', 'DESC']]
+    });
+    const lastOrderNumber = latestOrder ? parseInt(latestOrder.orderNumber.substring(2)) : 0;
+    const newOrderNumber = `SS${String(lastOrderNumber + 1).padStart(6, '0')}`;
 
     const order = await Order.create({
-      orderNumber,
+      orderNumber: newOrderNumber,
       customerId,
       workerId: selectedWorker?.id,
       totalAmount,
@@ -90,19 +103,20 @@ router.post('/create-with-customer', [auth, adminAuth], async (req, res) => {
       status: 'received'
     }, { transaction });
 
+    // Create measurements if provided
+    if (measurements && Object.keys(measurements).length > 0) {
+      await Measurement.create({
+        orderId: order.id,
+        ...measurements
+      }, { transaction });
+    }
+
     // Safely increment customer order count
     await Customer.increment('totalOrders', {
       by: 1,
       where: { id: customerId },
       transaction
     });
-
-    if (selectedWorker?.id) {
-      await Worker.update(
-        { status: 'busy' },
-        { where: { id: selectedWorker.id }, transaction }
-      );
-    }
 
     await transaction.commit();
 
@@ -161,13 +175,7 @@ router.delete('/:id', [auth, adminAuth], async (req, res) => {
       });
     }
 
-    // Set worker as available if assigned
-    if (order.workerId) {
-      await Worker.update(
-        { status: 'available' },
-        { where: { id: order.workerId }, transaction }
-      );
-    }
+    // Since we removed the status field from the Worker model, we no longer need to update the status.
 
     // Safely decrease customer's total orders count (prevent negative)
     if (order.customerId) {
@@ -180,6 +188,9 @@ router.delete('/:id', [auth, adminAuth], async (req, res) => {
         transaction
       });
     }
+    
+    // Delete any associated measurements
+    await Measurement.destroy({ where: { orderId: order.id }, transaction });
 
     await order.destroy({ transaction });
     await transaction.commit();
@@ -194,6 +205,41 @@ router.delete('/:id', [auth, adminAuth], async (req, res) => {
       success: false,
       message: error.message 
     });
+  }
+});
+
+// Add or update measurements for a specific order
+router.post('/:orderId/measurements', auth, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const measurementData = req.body;
+
+    // Check if an order with the given ID exists
+    const order = await Order.findByPk(orderId);
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found.' });
+    }
+
+    // Find if a measurement record already exists for this order
+    let measurement = await Measurement.findOne({ where: { orderId } });
+
+    if (measurement) {
+      // If it exists, update it
+      await measurement.update(measurementData);
+      console.log(`Measurements updated for order: ${orderId}`);
+    } else {
+      // If not, create a new one
+      measurement = await Measurement.create({
+        orderId,
+        ...measurementData,
+      });
+      console.log(`Measurements created for order: ${orderId}`);
+    }
+
+    res.status(200).json({ success: true, measurement });
+  } catch (error) {
+    console.error('Error creating/updating measurements:', error);
+    res.status(500).json({ success: false, message: 'Failed to save measurements.' });
   }
 });
 

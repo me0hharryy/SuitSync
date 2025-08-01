@@ -33,10 +33,6 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DECIMAL(8, 2),
       allowNull: true,
     },
-    status: {
-      type: DataTypes.ENUM('available', 'busy', 'on_break', 'offline'),
-      defaultValue: 'available',
-    },
     specialization: {
       type: DataTypes.STRING,
     },
@@ -66,13 +62,9 @@ module.exports = (sequelize, DataTypes) => {
         daysPerWeek: 6
       },
     },
-    performanceMetrics: {
-      type: DataTypes.JSONB,
-      defaultValue: {
-        completedOrders: 0,
-        averageRating: 0,
-        onTimeDelivery: 0
-      },
+    workHistory: {
+      type: DataTypes.TEXT,
+      allowNull: true,
     },
   });
 

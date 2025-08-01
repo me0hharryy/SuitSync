@@ -102,9 +102,20 @@ const Orders = () => {
     deliveryDate: '',
     notes: '',
     advancePayment: 0,
+    measurements: {
+      chest: '',
+      waist: '',
+      hips: '',
+      shoulder: '',
+      sleeveLength: '',
+      collarSize: '',
+      inseam: '',
+      thigh: '',
+      customMeasurements: '',
+    }
   });
 
-  const steps = ['Customer Selection', 'Order Items', 'Worker Assignment', 'Review & Submit'];
+  const steps = ['Customer Selection', 'Order Items', 'Measurements', 'Worker Assignment', 'Review & Submit'];
 
   const itemTypes = [
     'Shirt',
@@ -211,7 +222,8 @@ const Orders = () => {
       });
       
       if (response.data.success) {
-        setWorkers(response.data.workers.filter(worker => worker.status === 'available'));
+        // The worker model no longer has a status field, so we just set all workers
+        setWorkers(response.data.workers);
       }
     } catch (error) {
       console.error('Error fetching workers:', error);
@@ -224,7 +236,6 @@ const Orders = () => {
           },
           skills: ['Shirt Making', 'Suit Construction'],
           specialization: 'Men\'s Formal Wear',
-          status: 'available'
         },
         {
           id: 2,
@@ -234,7 +245,6 @@ const Orders = () => {
           },
           skills: ['Pattern Making', 'Women\'s Formal Wear'],
           specialization: 'Women\'s Formal Wear',
-          status: 'available'
         }
       ]);
     }
@@ -272,6 +282,9 @@ const Orders = () => {
         deliveryDate: order.deliveryDate ? order.deliveryDate.split('T')[0] : '',
         notes: order.notes || '',
         advancePayment: order.advancePayment || 0,
+        measurements: order.measurements?.[0] || { // Assuming there is one measurement object per order
+          chest: '', waist: '', hips: '', shoulder: '', sleeveLength: '', collarSize: '', inseam: '', thigh: '', customMeasurements: ''
+        },
       });
     } else {
       setEditingOrder(null);
@@ -304,6 +317,9 @@ const Orders = () => {
         deliveryDate: '',
         notes: '',
         advancePayment: 0,
+        measurements: {
+          chest: '', waist: '', hips: '', shoulder: '', sleeveLength: '', collarSize: '', inseam: '', thigh: '', customMeasurements: ''
+        }
       });
     }
     setOpenDialog(true);
@@ -374,9 +390,13 @@ const Orders = () => {
       case 1:
         return orderData.items.every(item => item.itemType && item.price > 0);
       
-      case 2:
-        return orderData.selectedWorker !== null && orderData.deliveryDate;
+      case 2: // Measurements
+        // Measurements are optional, so we don't need to validate
+        return true;
       
+      case 3: // Worker Assignment
+        return orderData.selectedWorker !== null && orderData.deliveryDate;
+        
       default:
         return true;
     }
@@ -427,6 +447,16 @@ const Orders = () => {
       )
     }));
   };
+  
+  const handleMeasurementChange = (field, value) => {
+    setOrderData(prev => ({
+      ...prev,
+      measurements: {
+        ...prev.measurements,
+        [field]: value
+      }
+    }));
+  };
 
   const calculateTotal = () => {
     return orderData.items.reduce((total, item) => total + (parseFloat(item.price) || 0), 0);
@@ -438,12 +468,52 @@ const Orders = () => {
     
     try {
       const token = localStorage.getItem('token');
+      if (!token) {
+        setError('Authentication token not found. Please login again.');
+        setLoading(false);
+        return;
+      }
       
+      // Cleanse measurements data: convert empty strings to null
+      const cleansedMeasurements = Object.fromEntries(
+        Object.entries(orderData.measurements).map(([key, value]) => [key, value === '' ? null : value])
+      );
+      
+      // Filter out empty measurements
+      const hasMeasurements = Object.values(cleansedMeasurements).some(value => value !== null && value !== '');
+
       const submitData = {
-        ...orderData,
+        selectedCustomer: orderData.selectedCustomer,
+        newCustomer: orderData.newCustomer,
+        isNewCustomer: orderData.isNewCustomer,
+        items: orderData.items,
+        selectedWorker: orderData.selectedWorker,
+        priority: orderData.priority,
+        deliveryDate: orderData.deliveryDate,
+        notes: orderData.notes,
+        advancePayment: orderData.advancePayment,
         totalAmount: calculateTotal(),
-        balanceAmount: calculateTotal() - (orderData.advancePayment || 0)
+        balanceAmount: calculateTotal() - (orderData.advancePayment || 0),
+        measurements: hasMeasurements ? cleansedMeasurements : null
       };
+      
+      // Validate customer selection before submitting
+      if (submitData.isNewCustomer && (!submitData.newCustomer.name || !submitData.newCustomer.email || !submitData.newCustomer.phone)) {
+        setError('Please fill in all required customer fields.');
+        setLoading(false);
+        return;
+      } else if (!submitData.isNewCustomer && !submitData.selectedCustomer) {
+        setError('Please select an existing customer.');
+        setLoading(false);
+        return;
+      }
+      
+      // Validate order items before submitting
+      if (submitData.items.length === 0 || submitData.items.some(item => !item.itemType || !item.price)) {
+        setError('Please ensure all order items have a type and a price.');
+        setLoading(false);
+        return;
+      }
 
       let response;
       
@@ -462,6 +532,15 @@ const Orders = () => {
       }
       
       if (response.data.success) {
+        // After creating the order, if measurements exist, submit them separately
+        if (hasMeasurements) {
+          await axios.post(
+            `http://localhost:3001/api/orders/${response.data.order.id}/measurements`,
+            cleansedMeasurements, // Use the cleansed data
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+        }
+        
         setSuccess(editingOrder ? 'Order updated successfully!' : 'Order created successfully!');
         fetchOrders();
         setTimeout(() => {
@@ -470,6 +549,7 @@ const Orders = () => {
         }, 2000);
       }
     } catch (error) {
+      console.error('Error in handleSubmitOrder:', error);
       setError(error.response?.data?.message || 'Operation failed');
     } finally {
       setLoading(false);
@@ -784,7 +864,102 @@ const Orders = () => {
           </Box>
         );
 
-      case 2: // Worker Assignment
+      case 2: // Measurements
+        return (
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              Measurements
+            </Typography>
+            <Divider sx={{ mb: 2 }} />
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Chest (inches)"
+                  type="number"
+                  value={orderData.measurements.chest}
+                  onChange={(e) => handleMeasurementChange('chest', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Waist (inches)"
+                  type="number"
+                  value={orderData.measurements.waist}
+                  onChange={(e) => handleMeasurementChange('waist', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Hips (inches)"
+                  type="number"
+                  value={orderData.measurements.hips}
+                  onChange={(e) => handleMeasurementChange('hips', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Shoulder (inches)"
+                  type="number"
+                  value={orderData.measurements.shoulder}
+                  onChange={(e) => handleMeasurementChange('shoulder', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Sleeve Length (inches)"
+                  type="number"
+                  value={orderData.measurements.sleeveLength}
+                  onChange={(e) => handleMeasurementChange('sleeveLength', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Collar Size (inches)"
+                  type="number"
+                  value={orderData.measurements.collarSize}
+                  onChange={(e) => handleMeasurementChange('collarSize', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Inseam (inches)"
+                  type="number"
+                  value={orderData.measurements.inseam}
+                  onChange={(e) => handleMeasurementChange('inseam', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Thigh (inches)"
+                  type="number"
+                  value={orderData.measurements.thigh}
+                  onChange={(e) => handleMeasurementChange('thigh', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Custom Measurements"
+                  multiline
+                  rows={2}
+                  value={orderData.measurements.customMeasurements}
+                  onChange={(e) => handleMeasurementChange('customMeasurements', e.target.value)}
+                  placeholder="e.g. Back length: 18 inches, Arm circumference: 12 inches"
+                />
+              </Grid>
+            </Grid>
+          </Box>
+        );
+
+      case 3: // Worker Assignment
         return (
           <Box>
             <Typography variant="h6" gutterBottom>
@@ -872,7 +1047,7 @@ const Orders = () => {
           </Box>
         );
 
-      case 3: // Review
+      case 4: // Review
         return (
           <Box>
             <Typography variant="h6" gutterBottom>
@@ -967,13 +1142,17 @@ const Orders = () => {
                 <Card variant="outlined">
                   <CardContent>
                     <Typography variant="subtitle1" gutterBottom>
-                      Additional Details
+                      Measurements
                     </Typography>
-                    <Typography variant="body2"><strong>Priority:</strong> {orderData.priority}</Typography>
-                    <Typography variant="body2"><strong>Delivery Date:</strong> {orderData.deliveryDate}</Typography>
-                    {orderData.notes && (
-                      <Typography variant="body2"><strong>Notes:</strong> {orderData.notes}</Typography>
-                    )}
+                    <Grid container spacing={2}>
+                      {Object.entries(orderData.measurements).map(([key, value]) => (
+                        <Grid item xs={12} sm={6} md={3} key={key}>
+                          <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>
+                            <strong>{key.replace(/([A-Z])/g, ' $1').trim()}:</strong> {value}
+                          </Typography>
+                        </Grid>
+                      ))}
+                    </Grid>
                   </CardContent>
                 </Card>
               </Grid>

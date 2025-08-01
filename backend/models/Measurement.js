@@ -1,3 +1,5 @@
+// backend/models/measurement.js
+
 module.exports = (sequelize, DataTypes) => {
   const Measurement = sequelize.define('Measurement', {
     id: {
@@ -5,71 +7,57 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
-    customerId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: 'Customers',
-        key: 'id',
-      },
-    },
     orderId: {
       type: DataTypes.UUID,
-      allowNull: true, // Can be linked to order later or used for general customer measurements
+      allowNull: false,
       references: {
         model: 'Orders',
         key: 'id',
       },
     },
-    measurementType: {
-      type: DataTypes.ENUM('shirt', 'pant', 'suit', 'blazer', 'kurta', 'dress', 'general'),
-      allowNull: false,
-      defaultValue: 'general'
-    },
-    measurements: {
-      type: DataTypes.JSONB,
-      allowNull: false,
-      defaultValue: {},
-      comment: 'Stores all measurement values in JSON format'
-    },
-    notes: {
-      type: DataTypes.TEXT,
-      comment: 'Additional notes about measurements'
-    },
-    takenBy: {
-      type: DataTypes.UUID,
+    // Common body measurements
+    chest: {
+      type: DataTypes.INTEGER,
       allowNull: true,
-      references: {
-        model: 'Users',
-        key: 'id',
-      },
-      comment: 'ID of the worker/admin who took the measurements'
     },
-    isActive: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: true,
-      comment: 'Whether this is the current active measurement set for the customer'
+    waist: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
     },
-    measurementDate: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
+    hips: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    shoulder: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    sleeveLength: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    collarSize: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    inseam: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    thigh: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    // Generic field for any other custom measurements
+    customMeasurements: {
+      type: DataTypes.JSON, // Stores an object of key-value pairs, e.g., { "back_length": 18, "arm_circumference": 12 }
+      allowNull: true,
     },
   });
 
   Measurement.associate = function(models) {
-    Measurement.belongsTo(models.Customer, {
-      foreignKey: 'customerId',
-      onDelete: 'CASCADE',
-    });
-    
     Measurement.belongsTo(models.Order, {
       foreignKey: 'orderId',
-      onDelete: 'SET NULL',
-    });
-    
-    Measurement.belongsTo(models.User, {
-      foreignKey: 'takenBy',
-      as: 'MeasuredBy',
     });
   };
 

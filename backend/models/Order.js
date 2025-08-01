@@ -77,8 +77,8 @@ module.exports = (sequelize, DataTypes) => {
     });
 
     Order.hasMany(models.Measurement, {
-      foreignKey: 'orderId',
-      as: 'measurements',
+    foreignKey: 'orderId',
+    as: 'measurements',
     });
   };
 

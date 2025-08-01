@@ -66,7 +66,6 @@ import axios from 'axios';
 
 const Workers = () => {
   const [workers, setWorkers] = useState([]);
-  const [filteredWorkers, setFilteredWorkers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingWorker, setEditingWorker] = useState(null);
@@ -76,13 +75,8 @@ const Workers = () => {
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [searchBy, setSearchBy] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
   const [specializationFilter, setSpecializationFilter] = useState('all');
   const [paymentTypeFilter, setPaymentTypeFilter] = useState('all');
-
-  // Status menu states
-  const [statusMenuAnchor, setStatusMenuAnchor] = useState(null);
-  const [selectedWorkerForStatus, setSelectedWorkerForStatus] = useState(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -95,7 +89,6 @@ const Workers = () => {
     pieceRate: '',
     specialization: '',
     experience: '',
-    status: 'available',
     address: '',
     emergencyContact: '',
     joinDate: new Date().toISOString().split('T')[0],
@@ -105,11 +98,7 @@ const Workers = () => {
       end: '18:00',
       daysPerWeek: 6
     },
-    performanceMetrics: {
-      completedOrders: 0,
-      averageRating: 0,
-      onTimeDelivery: 0
-    }
+    workHistory: ''
   });
 
   const searchOptions = [
@@ -146,72 +135,13 @@ const Workers = () => {
     'Traditional Wear',
     'Designer Clothing'
   ];
-
-  const statusOptions = [
-    { value: 'available', label: 'Available', color: 'success', icon: CheckCircleIcon },
-    { value: 'busy', label: 'Busy', color: 'warning', icon: WarningIcon },
-    { value: 'on_break', label: 'On Break', color: 'info', icon: ScheduleIcon },
-    { value: 'offline', label: 'Offline', color: 'error', icon: CircleIcon }
-  ];
-
+  
   useEffect(() => {
     fetchWorkers();
     const interval = setInterval(fetchWorkers, 30000);
     return () => clearInterval(interval);
   }, []);
-
-  // Filter workers based on search and filters
-  useEffect(() => {
-    let filtered = [...workers];
-
-    // Apply search filter
-    if (searchTerm.trim()) {
-      filtered = filtered.filter(worker => {
-        const searchLower = searchTerm.toLowerCase();
-        const user = worker.User;
-        
-        switch (searchBy) {
-          case 'name':
-            return user?.name?.toLowerCase().includes(searchLower);
-          case 'email':
-            return user?.email?.toLowerCase().includes(searchLower);
-          case 'phone':
-            return user?.phone?.toLowerCase().includes(searchLower);
-          case 'specialization':
-            return worker.specialization?.toLowerCase().includes(searchLower);
-          case 'skills':
-            return worker.skills?.some(skill => skill.toLowerCase().includes(searchLower));
-          default: // 'all'
-            return (
-              user?.name?.toLowerCase().includes(searchLower) ||
-              user?.email?.toLowerCase().includes(searchLower) ||
-              user?.phone?.toLowerCase().includes(searchLower) ||
-              worker.specialization?.toLowerCase().includes(searchLower) ||
-              worker.skills?.some(skill => skill.toLowerCase().includes(searchLower)) ||
-              worker.address?.toLowerCase().includes(searchLower)
-            );
-        }
-      });
-    }
-
-    // Apply status filter
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(worker => worker.status === statusFilter);
-    }
-
-    // Apply specialization filter
-    if (specializationFilter !== 'all') {
-      filtered = filtered.filter(worker => worker.specialization === specializationFilter);
-    }
-
-    // Apply payment type filter
-    if (paymentTypeFilter !== 'all') {
-      filtered = filtered.filter(worker => worker.paymentType === paymentTypeFilter);
-    }
-
-    setFilteredWorkers(filtered);
-  }, [workers, searchTerm, searchBy, statusFilter, specializationFilter, paymentTypeFilter]);
-
+  
   const fetchWorkers = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -231,7 +161,6 @@ const Workers = () => {
             pieceRate: null,
             specialization: 'Men\'s Formal Wear',
             experience: 5,
-            status: 'available',
             address: '123 Worker St, City',
             emergencyContact: '9876543210',
             joinDate: '2023-01-15',
@@ -241,12 +170,8 @@ const Workers = () => {
               end: '18:00',
               daysPerWeek: 6
             },
-            performanceMetrics: {
-              completedOrders: 45,
-              averageRating: 4.5,
-              onTimeDelivery: 92
-            },
-            currentOrders: 3
+            currentOrders: 3,
+            workHistory: 'Worked at a luxury tailor shop for 5 years.'
           },
           {
             id: 2,
@@ -262,7 +187,6 @@ const Workers = () => {
             pieceRate: null,
             specialization: 'Women\'s Formal Wear',
             experience: 8,
-            status: 'busy',
             address: '456 Tailor Ave, City',
             emergencyContact: '9876543211',
             joinDate: '2022-03-10',
@@ -272,12 +196,8 @@ const Workers = () => {
               end: '17:30',
               daysPerWeek: 5
             },
-            performanceMetrics: {
-              completedOrders: 78,
-              averageRating: 4.8,
-              onTimeDelivery: 96
-            },
-            currentOrders: 5
+            currentOrders: 5,
+            workHistory: 'Previously managed a team of tailors at a high-end boutique.'
           },
           {
             id: 3,
@@ -293,7 +213,6 @@ const Workers = () => {
             pieceRate: 150,
             specialization: 'Traditional Wear',
             experience: 12,
-            status: 'on_break',
             address: '789 Craft Lane, City',
             emergencyContact: '9876543212',
             joinDate: '2021-06-20',
@@ -303,14 +222,10 @@ const Workers = () => {
               end: '19:00',
               daysPerWeek: 6
             },
-            performanceMetrics: {
-              completedOrders: 120,
-              averageRating: 4.9,
-              onTimeDelivery: 89
-            },
-            currentOrders: 2
+            currentOrders: 2,
+            workHistory: 'Extensive experience in embroidery for traditional garments.'
           }
-        ]);
+      ]);
         return;
       }
       const response = await axios.get('http://localhost:3001/api/workers', {
@@ -338,7 +253,6 @@ const Workers = () => {
           pieceRate: null,
           specialization: 'Men\'s Formal Wear',
           experience: 5,
-          status: 'available',
           address: '123 Worker St, City',
           emergencyContact: '9876543210',
           joinDate: '2023-01-15',
@@ -348,12 +262,8 @@ const Workers = () => {
             end: '18:00',
             daysPerWeek: 6
           },
-          performanceMetrics: {
-            completedOrders: 45,
-            averageRating: 4.5,
-            onTimeDelivery: 92
-            },
-            currentOrders: 3
+          currentOrders: 3,
+          workHistory: 'Worked at a luxury tailor shop for 5 years.'
           },
           {
             id: 2,
@@ -369,7 +279,6 @@ const Workers = () => {
             pieceRate: null,
             specialization: 'Women\'s Formal Wear',
             experience: 8,
-            status: 'busy',
             address: '456 Tailor Ave, City',
             emergencyContact: '9876543211',
             joinDate: '2022-03-10',
@@ -379,12 +288,8 @@ const Workers = () => {
               end: '17:30',
               daysPerWeek: 5
             },
-            performanceMetrics: {
-              completedOrders: 78,
-              averageRating: 4.8,
-              onTimeDelivery: 96
-            },
-            currentOrders: 5
+            currentOrders: 5,
+            workHistory: 'Previously managed a team of tailors at a high-end boutique.'
           },
           {
             id: 3,
@@ -400,7 +305,6 @@ const Workers = () => {
             pieceRate: 150,
             specialization: 'Traditional Wear',
             experience: 12,
-            status: 'on_break',
             address: '789 Craft Lane, City',
             emergencyContact: '9876543212',
             joinDate: '2021-06-20',
@@ -410,56 +314,11 @@ const Workers = () => {
               end: '19:00',
               daysPerWeek: 6
             },
-            performanceMetrics: {
-              completedOrders: 120,
-              averageRating: 4.9,
-              onTimeDelivery: 89
-            },
-            currentOrders: 2
+            currentOrders: 2,
+            workHistory: 'Extensive experience in embroidery for traditional garments.'
           }
       ]);
     }
-  };
-
-  // Status menu handlers
-  const handleStatusMenuOpen = (event, worker) => {
-    event.stopPropagation();
-    setStatusMenuAnchor(event.currentTarget);
-    setSelectedWorkerForStatus(worker);
-  };
-
-  const handleStatusMenuClose = () => {
-    setStatusMenuAnchor(null);
-    setSelectedWorkerForStatus(null);
-  };
-
-  const handleQuickStatusUpdate = async (newStatus) => {
-    if (!selectedWorkerForStatus) return;
-    
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setError('Authentication token not found. Please login.');
-        return;
-      }
-      
-      const response = await axios.put(
-        `http://localhost:3001/api/workers/${selectedWorkerForStatus.id}/status`,
-        { status: newStatus },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      
-      if (response.data.success) {
-        setSuccess('Worker status updated successfully!');
-        fetchWorkers();
-        setTimeout(() => setSuccess(''), 3000);
-      }
-    } catch (error) {
-      setError('Failed to update worker status');
-      setTimeout(() => setError(''), 3000);
-    }
-    
-    handleStatusMenuClose();
   };
 
   const handleOpenDialog = (worker = null) => {
@@ -476,7 +335,6 @@ const Workers = () => {
         pieceRate: worker.pieceRate || '',
         specialization: worker.specialization || '',
         experience: worker.experience || '',
-        status: worker.status || 'available',
         address: worker.address || '',
         emergencyContact: worker.emergencyContact || '',
         joinDate: worker.joinDate || new Date().toISOString().split('T')[0],
@@ -486,11 +344,7 @@ const Workers = () => {
           end: '18:00',
           daysPerWeek: 6
         },
-        performanceMetrics: worker.performanceMetrics || {
-          completedOrders: 0,
-          averageRating: 0,
-          onTimeDelivery: 0
-        }
+        workHistory: worker.workHistory || '',
       });
     } else {
       setEditingWorker(null);
@@ -505,7 +359,6 @@ const Workers = () => {
         pieceRate: '',
         specialization: '',
         experience: '',
-        status: 'available',
         address: '',
         emergencyContact: '',
         joinDate: new Date().toISOString().split('T')[0],
@@ -515,11 +368,7 @@ const Workers = () => {
           end: '18:00',
           daysPerWeek: 6
         },
-        performanceMetrics: {
-          completedOrders: 0,
-          averageRating: 0,
-          onTimeDelivery: 0
-        }
+        workHistory: '',
       });
     }
     setOpenDialog(true);
@@ -557,6 +406,11 @@ const Workers = () => {
 
     try {
       const token = localStorage.getItem('token');
+      if (!token) {
+        setError('Authentication token not found. Please login again.');
+        setLoading(false);
+        return;
+      }
       
       if (editingWorker) {
         const response = await axios.put(
@@ -648,16 +502,6 @@ const Workers = () => {
 };
 
 
-  const getStatusColor = (status) => {
-    const colors = {
-      'available': 'success',
-      'busy': 'warning',
-      'on_break': 'info',
-      'offline': 'error'
-    };
-    return colors[status] || 'default';
-  };
-
   const getPaymentDisplay = (worker) => {
     switch (worker.paymentType) {
       case 'monthly':
@@ -678,7 +522,6 @@ const Workers = () => {
   const clearAllFilters = () => {
     setSearchTerm('');
     setSearchBy('all');
-    setStatusFilter('all');
     setSpecializationFilter('all');
     setPaymentTypeFilter('all');
   };
@@ -687,6 +530,20 @@ const Workers = () => {
     const specializations = workers.map(w => w.specialization).filter(Boolean);
     return [...new Set(specializations)];
   };
+
+  const filteredWorkers = workers.filter(worker => {
+    const matchesSearch = 
+      worker.User?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      worker.User?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      worker.User?.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      worker.specialization?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      worker.skills?.some(skill => skill.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesSpecialization = specializationFilter === 'all' || worker.specialization === specializationFilter;
+    const matchesPaymentType = paymentTypeFilter === 'all' || worker.paymentType === paymentTypeFilter;
+    
+    return matchesSearch && matchesSpecialization && matchesPaymentType;
+  });
 
   return (
     <Box>
@@ -702,7 +559,7 @@ const Workers = () => {
               Worker Management
             </Typography>
             <Typography variant="body1" color="text.secondary">
-              Manage your tailoring team with auto status updates, flexible payment options, and advanced search
+              Manage your tailoring team with flexible payment options, and advanced search
             </Typography>
           </Box>
           
@@ -814,25 +671,8 @@ const Workers = () => {
 
             {/* Filter Row */}
             <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} md={3}>
-                <TextField
-                  fullWidth
-                  select
-                  label="Status"
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  size="small"
-                >
-                  <MenuItem value="all">All Status</MenuItem>
-                  {statusOptions.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
               
-              <Grid item xs={12} md={3}>
+              <Grid item xs={12} md={4}>
                 <TextField
                   fullWidth
                   select
@@ -850,7 +690,7 @@ const Workers = () => {
                 </TextField>
               </Grid>
               
-              <Grid item xs={12} md={3}>
+              <Grid item xs={12} md={4}>
                 <TextField
                   fullWidth
                   select
@@ -866,7 +706,7 @@ const Workers = () => {
                 </TextField>
               </Grid>
               
-              <Grid item xs={12} md={3}>
+              <Grid item xs={12} md={4}>
                 <Button
                   fullWidth
                   variant="outlined"
@@ -879,7 +719,7 @@ const Workers = () => {
               </Grid>
             </Grid>
             
-            {(searchTerm || statusFilter !== 'all' || specializationFilter !== 'all' || paymentTypeFilter !== 'all') && (
+            {(searchTerm || specializationFilter !== 'all' || paymentTypeFilter !== 'all') && (
               <Box mt={2}>
                 <Typography variant="body2" color="text.secondary">
                   Showing {filteredWorkers.length} of {workers.length} workers
@@ -906,8 +746,6 @@ const Workers = () => {
                   <TableCell>Contact</TableCell>
                   <TableCell>Skills & Specialization</TableCell>
                   <TableCell>Payment</TableCell>
-                  <TableCell>Performance</TableCell>
-                  <TableCell>Status</TableCell>
                   <TableCell>Current Load</TableCell>
                   <TableCell>Actions</TableCell>
                 </TableRow>
@@ -933,9 +771,7 @@ const Workers = () => {
                                   width: 12,
                                   height: 12,
                                   borderRadius: '50%',
-                                  bgcolor: worker.status === 'available' ? 'success.main' : 
-                                           worker.status === 'busy' ? 'warning.main' :
-                                           worker.status === 'on_break' ? 'info.main' : 'error.main',
+                                  bgcolor: worker.isActive ? 'success.main' : 'error.main',
                                   border: '2px solid white'
                                 }}
                               />
@@ -952,12 +788,6 @@ const Workers = () => {
                             <Typography variant="caption" color="text.secondary">
                               {worker.experience} years exp • Joined {new Date(worker.joinDate).getFullYear()}
                             </Typography>
-                            <Box display="flex" alignItems="center" gap={0.5} mt={0.5}>
-                              <StarIcon sx={{ fontSize: 14, color: 'warning.main' }} />
-                              <Typography variant="caption">
-                                {worker.performanceMetrics?.averageRating || 0}/5
-                              </Typography>
-                            </Box>
                           </Box>
                         </Box>
                       </TableCell>
@@ -1025,48 +855,6 @@ const Workers = () => {
                       </TableCell>
                       
                       <TableCell>
-                        <Box>
-                          <Box display="flex" alignItems="center" gap={1} mb={1}>
-                            <TrendingUpIcon fontSize="small" color="success" />
-                            <Typography variant="caption">
-                              {worker.performanceMetrics?.completedOrders || 0} orders
-                            </Typography>
-                          </Box>
-                          <Box mb={1}>
-                            <Typography variant="caption" color="text.secondary">
-                              On-time delivery
-                            </Typography>
-                            <LinearProgress
-                              variant="determinate"
-                              value={worker.performanceMetrics?.onTimeDelivery || 0}
-                              color={getPerformanceColor(worker.performanceMetrics?.onTimeDelivery || 0)}
-                              sx={{ height: 4, borderRadius: 2 }}
-                            />
-                            <Typography variant="caption" color="text.secondary">
-                              {worker.performanceMetrics?.onTimeDelivery || 0}%
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </TableCell>
-                      
-                      <TableCell>
-                        <Chip 
-                          label={worker.status?.replace('_', ' ') || 'available'}
-                          color={getStatusColor(worker.status)}
-                          size="small"
-                          sx={{ 
-                            textTransform: 'capitalize',
-                            cursor: 'pointer',
-                            '&:hover': {
-                              opacity: 0.8,
-                              transform: 'scale(1.05)'
-                            }
-                          }}
-                          onClick={(e) => handleStatusMenuOpen(e, worker)}
-                        />
-                      </TableCell>
-                      
-                      <TableCell>
                         <Box display="flex" alignItems="center" gap={1}>
                           <AssignmentIcon fontSize="small" color="action" />
                           <Typography variant="body2">
@@ -1094,15 +882,6 @@ const Workers = () => {
                             </IconButton>
                           </Tooltip>
                           
-                          <Tooltip title="View Performance">
-                            <IconButton
-                              size="small"
-                              color="info"
-                            >
-                              <TimelineIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          
                           <Tooltip title="Delete Worker">
                             <IconButton
                               size="small"
@@ -1124,18 +903,18 @@ const Workers = () => {
           {filteredWorkers.length === 0 && !loading && (
             <Box py={8} textAlign="center">
               <Typography variant="h6" color="text.secondary">
-                {searchTerm || statusFilter !== 'all' || specializationFilter !== 'all' || paymentTypeFilter !== 'all' 
+                {searchTerm || specializationFilter !== 'all' || paymentTypeFilter !== 'all' 
                   ? 'No workers found matching your filters' 
                   : 'No workers found'
                 }
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {searchTerm || statusFilter !== 'all' || specializationFilter !== 'all' || paymentTypeFilter !== 'all'
+                {searchTerm || specializationFilter !== 'all' || paymentTypeFilter !== 'all'
                   ? 'Try adjusting your search criteria or filters'
                   : 'Add your first worker to get started'
                 }
               </Typography>
-              {(searchTerm || statusFilter !== 'all' || specializationFilter !== 'all' || paymentTypeFilter !== 'all') && (
+              {(searchTerm || specializationFilter !== 'all' || paymentTypeFilter !== 'all') && (
                 <Button onClick={clearAllFilters} sx={{ mt: 2 }}>
                   Clear All Filters
                 </Button>
@@ -1144,60 +923,6 @@ const Workers = () => {
           )}
         </Card>
       </motion.div>
-
-      {/* Status Change Menu */}
-      <Menu
-        anchorEl={statusMenuAnchor}
-        open={Boolean(statusMenuAnchor)}
-        onClose={handleStatusMenuClose}
-        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-        PaperProps={{
-          sx: {
-            mt: 1,
-            minWidth: 200,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-          }
-        }}
-      >
-        <Box sx={{ p: 1 }}>
-          <Typography variant="subtitle2" sx={{ px: 2, py: 1, color: 'text.secondary' }}>
-            Change Status
-          </Typography>
-          {statusOptions.map((option) => {
-            const IconComponent = option.icon;
-            return (
-              <MenuItem 
-                key={option.value}
-                onClick={() => handleQuickStatusUpdate(option.value)}
-                disabled={option.value === selectedWorkerForStatus?.status}
-                sx={{
-                  borderRadius: 1,
-                  mx: 1,
-                  my: 0.5,
-                  '&:hover': {
-                    bgcolor: `${option.color === 'default' ? 'grey' : option.color}.50`
-                  }
-                }}
-              >
-                <ListItemIcon>
-                  <IconComponent fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>
-                  <Box display="flex" alignItems="center" justifyContent="space-between">
-                    <Typography variant="body2">{option.label}</Typography>
-                    {option.value === selectedWorkerForStatus?.status && (
-                      <Typography variant="caption" color="text.secondary">
-                        Current
-                      </Typography>
-                    )}
-                  </Box>
-                </ListItemText>
-              </MenuItem>
-            );
-          })}
-        </Box>
-      </Menu>
 
       {/* Add/Edit Worker Dialog - Integrated form */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="lg" fullWidth>
@@ -1425,6 +1150,28 @@ const Workers = () => {
                 </Grid>
               </CardContent>
             </Card>
+            
+            {/* Work History */}
+            <Card variant="outlined" sx={{ mb: 3 }}>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Work History
+                </Typography>
+                <Divider sx={{ mb: 2 }} />
+                <Grid container spacing={3}>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Past Experience and Notes"
+                      multiline
+                      rows={4}
+                      value={formData.workHistory}
+                      onChange={(e) => handleInputChange('workHistory', e.target.value)}
+                    />
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
 
             {/* Working Hours and Status */}
             <Card variant="outlined">
@@ -1469,24 +1216,9 @@ const Workers = () => {
                   
                   <Grid item xs={12}>
                     <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
-                      Status & Settings
+                      Settings
                     </Typography>
                     <Divider sx={{ mb: 2 }} />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      fullWidth
-                      select
-                      label="Current Status"
-                      value={formData.status}
-                      onChange={(e) => handleInputChange('status', e.target.value)}
-                    >
-                      {statusOptions.map((option) => (
-                        <MenuItem key={option.value} value={option.value}>
-                          {option.label}
-                        </MenuItem>
-                      ))}
-                    </TextField>
                   </Grid>
                   <Grid item xs={12} md={6}>
                     <FormControlLabel
