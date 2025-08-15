@@ -1,0 +1,16 @@
+{
+  "name": "suitsync-monorepo",
+  "version": "1.0.0",
+  "description": "Master control for the SuitSync full-stack application",
+  "private": true,
+  "scripts": {
+    "install-all": "npm install && (cd backend && npm install) && (cd SuitMate && npm install)",
+    "dev": "concurrently \"npm:dev-backend\" \"npm:dev-frontend\"",
+    "dev-backend": "cd backend && npm run dev",
+    "dev-frontend": "cd SuitMate && npm run dev",
+    "setup-db": "cd backend && npm run setup"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

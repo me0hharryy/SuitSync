@@ -42,6 +42,10 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// backend/routes/orders.js
+
+// ... (keep all other require statements and routes the same)
+
 // Create order with customer linking
 router.post('/create-with-customer', [auth, adminAuth], async (req, res) => {
   const transaction = await require('../config/database').transaction();
@@ -51,6 +55,7 @@ router.post('/create-with-customer', [auth, adminAuth], async (req, res) => {
       selectedCustomer,
       newCustomer,
       isNewCustomer,
+      items, // <<< THIS WAS THE MISSING PIECE. IT IS NOW ADDED.
       selectedWorker,
       priority,
       deliveryDate,
@@ -70,20 +75,16 @@ router.post('/create-with-customer', [auth, adminAuth], async (req, res) => {
         name: newCustomer.name,
         phone: newCustomer.phone
       };
-
       const user = await User.create(userData, { transaction });
-      
       const customer = await Customer.create({
         userId: user.id,
         address: newCustomer.address || ''
       }, { transaction });
-
       customerId = customer.id;
     } else {
       customerId = selectedCustomer.id;
     }
 
-    // Find the max order number and increment it
     const latestOrder = await Order.findOne({
       order: [['orderNumber', 'DESC']]
     });
@@ -103,7 +104,20 @@ router.post('/create-with-customer', [auth, adminAuth], async (req, res) => {
       status: 'received'
     }, { transaction });
 
-    // Create measurements if provided
+    // Now that 'items' is correctly received, this loop will execute
+    if (items && items.length > 0) {
+      for (const item of items) {
+        await OrderItem.create({
+          orderId: order.id,
+          itemType: item.itemType,
+          fabric: item.fabric,
+          color: item.color,
+          specifications: item.specifications,
+          price: item.price
+        }, { transaction });
+      }
+    }
+
     if (measurements && Object.keys(measurements).length > 0) {
       await Measurement.create({
         orderId: order.id,
@@ -111,7 +125,6 @@ router.post('/create-with-customer', [auth, adminAuth], async (req, res) => {
       }, { transaction });
     }
 
-    // Safely increment customer order count
     await Customer.increment('totalOrders', {
       by: 1,
       where: { id: customerId },
@@ -128,12 +141,18 @@ router.post('/create-with-customer', [auth, adminAuth], async (req, res) => {
 
   } catch (error) {
     await transaction.rollback();
+    console.error("Order creation error:", error);
     res.status(500).json({ 
       success: false,
       message: error.message 
     });
   }
 });
+
+
+// ... (keep the rest of the routes in the file as they are)
+
+
 
 // Update order status
 router.put('/:id/status', [auth], async (req, res) => {

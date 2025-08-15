@@ -14,47 +14,33 @@ router.get('/stats', [auth], async (req, res) => {
     const pendingPayments = await Order.sum('balanceAmount').catch(() => 0) || 0;
 
     // Order status breakdown
-    let ordersByStatus = {};
-    try {
-      const orderStatuses = await Order.findAll({
-        attributes: ['status'],
-        raw: true
-      });
-      
-      ordersByStatus = orderStatuses.reduce((acc, order) => {
-        acc[order.status] = (acc[order.status] || 0) + 1;
-        return acc;
-      }, {});
-    } catch (error) {
-      ordersByStatus = {
-        received: 0,
-        'in-progress': 0,
-        ready: 0,
-        delivered: 0,
-        cancelled: 0
-      };
-    }
+    const orderStatuses = await Order.findAll({ attributes: ['status'], raw: true });
+    const ordersByStatus = orderStatuses.reduce((acc, order) => {
+      acc[order.status] = (acc[order.status] || 0) + 1;
+      return acc;
+    }, {});
 
-    // Worker status breakdown
-    let workersByStatus = {};
-    try {
-      const workerStatuses = await Worker.findAll({
-        attributes: ['status'],
-        raw: true
-      });
-      
-      workersByStatus = workerStatuses.reduce((acc, worker) => {
-        acc[worker.status] = (acc[worker.status] || 0) + 1;
-        return acc;
-      }, {});
-    } catch (error) {
-      workersByStatus = {
-        available: 0,
-        busy: 0,
-        on_break: 0,
-        offline: 0
-      };
-    }
+    // Correctly calculate Worker status breakdown by checking their active orders
+    const allWorkers = await Worker.findAll({
+      include: [{ model: Order, as: 'assignedOrders', attributes: ['status'] }]
+    });
+
+    const workersByStatus = allWorkers.reduce((acc, worker) => {
+      const busyOrders = worker.assignedOrders.filter(order => order.status !== 'delivered' && order.status !== 'cancelled').length;
+      const status = busyOrders > 0 ? 'busy' : 'available';
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, { available: 0, busy: 0, on_break: 0, offline: 0 }); // Initialize with defaults
+
+    // Fetch recent orders for the dashboard table
+    const recentOrders = await Order.findAll({
+        limit: 5,
+        order: [['createdAt', 'DESC']],
+        include: [
+            { model: Customer, include: [{ model: User, attributes: ['name', 'email'] }] },
+            { model: Worker, include: [{ model: User, attributes: ['name'] }] }
+        ]
+    });
 
     const stats = {
       totalCustomers,
@@ -68,9 +54,9 @@ router.get('/stats', [auth], async (req, res) => {
         collectedPayments: totalRevenue - pendingPayments,
         averageOrderValue: totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0
       },
-      recentOrders: [],
-      topWorkers: [],
-      monthlyTrends: [],
+      recentOrders, // Pass the fetched recent orders to the frontend
+      topWorkers: [], // Placeholder for future implementation
+      monthlyTrends: [], // Placeholder for future implementation
       generatedAt: new Date().toISOString()
     };
 
@@ -79,6 +65,7 @@ router.get('/stats', [auth], async (req, res) => {
       stats
     });
   } catch (error) {
+    console.error('Error fetching admin stats:', error);
     res.status(500).json({ 
       success: false,
       message: error.message 
