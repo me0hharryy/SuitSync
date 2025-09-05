@@ -4,6 +4,7 @@ const { auth, adminAuth } = require('../middleware/auth');
 const { Op } = require('sequelize');
 const router = express.Router();
 
+
 // Get all orders
 router.get('/', auth, async (req, res) => {
   try {
@@ -42,9 +43,35 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// backend/routes/orders.js
+// NEW: GET route for fetching invoice data
+router.get('/:id/invoice', auth, async (req, res) => {
+  try {
+    const order = await Order.findByPk(req.params.id, {
+      include: [
+        {
+          model: Customer,
+          include: [{ model: User, attributes: ['name', 'email', 'phone'] }]
+        },
+        {
+          model: OrderItem,
+          as: 'items'
+        },
+      ]
+    });
 
-// ... (keep all other require statements and routes the same)
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    res.json({
+      success: true,
+      invoice: order
+    });
+  } catch (error) {
+    console.error('Error fetching invoice data:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 // Create order with customer linking
 router.post('/create-with-customer', [auth, adminAuth], async (req, res) => {
@@ -55,7 +82,7 @@ router.post('/create-with-customer', [auth, adminAuth], async (req, res) => {
       selectedCustomer,
       newCustomer,
       isNewCustomer,
-      items, // <<< THIS WAS THE MISSING PIECE. IT IS NOW ADDED.
+      items,
       selectedWorker,
       priority,
       deliveryDate,
@@ -104,7 +131,6 @@ router.post('/create-with-customer', [auth, adminAuth], async (req, res) => {
       status: 'received'
     }, { transaction });
 
-    // Now that 'items' is correctly received, this loop will execute
     if (items && items.length > 0) {
       for (const item of items) {
         await OrderItem.create({
@@ -149,10 +175,28 @@ router.post('/create-with-customer', [auth, adminAuth], async (req, res) => {
   }
 });
 
-
-// ... (keep the rest of the routes in the file as they are)
-
-
+// Update order fully by ID
+router.put('/:id', [auth], async (req, res) => {
+  try {
+    const order = await Order.findByPk(req.params.id);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+    await order.update(req.body);
+    res.json({
+      success: true,
+      order
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
 
 // Update order status
 router.put('/:id/status', [auth], async (req, res) => {
@@ -194,9 +238,6 @@ router.delete('/:id', [auth, adminAuth], async (req, res) => {
       });
     }
 
-    // Since we removed the status field from the Worker model, we no longer need to update the status.
-
-    // Safely decrease customer's total orders count (prevent negative)
     if (order.customerId) {
       await Customer.decrement('totalOrders', {
         by: 1,
@@ -208,7 +249,6 @@ router.delete('/:id', [auth, adminAuth], async (req, res) => {
       });
     }
     
-    // Delete any associated measurements
     await Measurement.destroy({ where: { orderId: order.id }, transaction });
 
     await order.destroy({ transaction });
@@ -233,26 +273,20 @@ router.post('/:orderId/measurements', auth, async (req, res) => {
     const { orderId } = req.params;
     const measurementData = req.body;
 
-    // Check if an order with the given ID exists
     const order = await Order.findByPk(orderId);
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found.' });
     }
 
-    // Find if a measurement record already exists for this order
     let measurement = await Measurement.findOne({ where: { orderId } });
 
     if (measurement) {
-      // If it exists, update it
       await measurement.update(measurementData);
-      console.log(`Measurements updated for order: ${orderId}`);
     } else {
-      // If not, create a new one
       measurement = await Measurement.create({
         orderId,
         ...measurementData,
       });
-      console.log(`Measurements created for order: ${orderId}`);
     }
 
     res.status(200).json({ success: true, measurement });
