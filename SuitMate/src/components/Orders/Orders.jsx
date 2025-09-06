@@ -356,7 +356,11 @@ const handleOpenDialog = (order = null) => {
             Array.isArray(order.items)
                 ? order.items.map(item => ({
                     ...item,
-                    measurements: Array.isArray(item.measurements) ? item.measurements : []
+                    measurements: Array.isArray(item.measurements)
+                        ? item.measurements
+                        : typeof item.measurements === 'string'
+                            ? item.measurements.split(',').map(m => m.trim())
+                            : []
                 }))
                 : [];
         // For backward compatibility, convert old measurement object to tags for the first item
@@ -1197,36 +1201,79 @@ const handleOpenDialog = (order = null) => {
     //aa rhea
 
 
-const handlePrintInvoice = async (orderId) => {
+const handlePrintInvoice = async (order) => {
+    if (!order) return;
     setLoading(true);
     setError('');
     try {
         const token = localStorage.getItem('token');
-        const response = await axios.get(`http://localhost:3001/api/orders/${orderId}/invoice`, {
+        // Fetch the base invoice data (customer, totals, etc.)
+        const response = await axios.get(`http://localhost:3001/api/orders/${order.id}/invoice`, {
             headers: { Authorization: `Bearer ${token}` }
         });
 
         if (response.data.success) {
-            const invoiceData = response.data.invoice;
-            const printWindow = window.open('', '_blank', 'height=700,width=900');
+            const backendInvoiceData = response.data.invoice;
+            const itemsWithMeasurements = JSON.parse(JSON.stringify(order.items || []));
+            
+            // Use a Set to gather all unique measurement tags
+            const finalTags = new Set(Array.isArray(itemsWithMeasurements[0]?.measurements) ? itemsWithMeasurements[0].measurements : []);
 
+            // --- THIS IS THE FIX ---
+            // It specifically targets, cleans, and parses the raw measurement string.
+            if (Array.isArray(order.measurements) && order.measurements.length > 0) {
+                const measurementObject = order.measurements[0];
+                
+                // 1. Check if the problematic 'customMeasurements' string exists.
+                if (measurementObject && typeof measurementObject.customMeasurements === 'string') {
+                    let cleanedString = measurementObject.customMeasurements;
+                    
+                    // 2. Remove any prefixes like "Item measurements: " using a flexible regular expression.
+                    cleanedString = cleanedString.replace(/.*?measurements:\s*/i, '');
+                    
+                    // 3. Split the clean string into individual tags.
+                    const parsedTags = cleanedString.split(',').map(tag => tag.trim()).filter(tag => tag);
+                    
+                    // 4. Add these clean tags to our list.
+                    parsedTags.forEach(tag => finalTags.add(tag));
+                
+                // As a fallback, process any other direct key-value measurements.
+                } else {
+                    Object.entries(measurementObject).forEach(([key, value]) => {
+                        const lowerKey = key.toLowerCase();
+                        if (value && !['id','orderid','createdat','updatedat', 'custommeasurements'].includes(lowerKey)) {
+                            const formattedKey = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+                            finalTags.add(`${formattedKey}: ${value}`);
+                        }
+                    });
+                }
+            }
+            // --- END OF FIX ---
+
+            // 5. Assign the final, clean list of tags to the item for printing.
+            if (itemsWithMeasurements.length > 0) {
+                itemsWithMeasurements[0].measurements = Array.from(finalTags);
+            }
+
+            const finalInvoiceData = {
+                ...backendInvoiceData,
+                items: itemsWithMeasurements
+            };
+
+            const printWindow = window.open('', '_blank', 'height=700,width=900');
             if (printWindow) {
                 printWindow.document.write('<link href="/src/index.css" rel="stylesheet"><div id="print-root"></div>');
                 printWindow.document.close();
-
                 const printRoot = printWindow.document.getElementById('print-root');
                 const root = createRoot(printRoot);
-
                 root.render(
                     <React.StrictMode>
                         <ThemeProvider theme={theme}>
                             <CssBaseline />
-                            <InvoiceBase invoiceData={invoiceData} />
+                            <InvoiceBase invoiceData={finalInvoiceData} />
                         </ThemeProvider>
                     </React.StrictMode>
                 );
-
-                // Wait for rendering then print
                 setTimeout(() => {
                     printWindow.print();
                     printWindow.close();
@@ -1485,10 +1532,17 @@ const handlePrintInvoice = async (orderId) => {
                                             <TableCell>
                                                 <Box display="flex" gap={1}>
                                                     <Tooltip title="Print Invoice">
-                                                        <IconButton size="small" onClick={() => handlePrintInvoice(order.id)} disabled={loading}>
-    <PrintIcon fontSize="small" />
+    <IconButton
+  size="small"
+  onClick={() => {
+    console.log("Print button clicked for order:", order);
+    handlePrintInvoice(order);
+  }}
+  disabled={loading}
+>
+  <PrintIcon fontSize="small" />
 </IconButton>
-                                                    </Tooltip>
+</Tooltip>
                                                     <Tooltip title="Edit Order">
     <IconButton
         size="small"
